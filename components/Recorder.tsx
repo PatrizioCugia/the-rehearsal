@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Scenario } from "@/lib/scenario";
+import {
+  stripInter1Payload,
+  type StrippedInter1,
+} from "@/lib/coach-payload";
+import { THRESHOLD_CQI, type Take } from "@/lib/session";
+import Curve from "./Curve";
+import TypedText from "./TypedText";
 
 type Status =
   | "idle"
@@ -24,16 +31,6 @@ const ANALYSIS_BEATS: Record<Status, string> = {
   error: "",
 };
 
-type Inter1Signal = { type: string; start: number; end: number };
-type Inter1Payload = {
-  signals: Inter1Signal[];
-  engagement_state?: Array<{ state: string; start: number; end: number }>;
-  conversation_quality?: {
-    overall?: Record<string, number>;
-    timeline?: Array<{ start: number; end: number; values: Record<string, number> }>;
-  };
-};
-
 function pickWebmMime(): string {
   const opts = [
     "video/webm;codecs=vp9,opus",
@@ -51,17 +48,22 @@ function pickWebmMime(): string {
 export default function Recorder(props: {
   scenario: Scenario;
   setImageUrl: string | null;
+  takes: Take[];
+  onTakeComplete: (take: Take) => void;
+  onQuit: () => void;
 }) {
-  const { scenario, setImageUrl } = props;
+  const { scenario, setImageUrl, takes, onTakeComplete, onQuit } = props;
+  const takeNumber = takes.length + 1;
 
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [takeNumber, setTakeNumber] = useState<number>(1);
   const [elapsedMs, setElapsedMs] = useState<number>(0);
   const [report, setReport] = useState<string | null>(null);
   const [replayUrl, setReplayUrl] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [inter1, setInter1] = useState<Inter1Payload | null>(null);
+  const [currentStripped, setCurrentStripped] = useState<StrippedInter1 | null>(
+    null
+  );
 
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const replayVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -71,17 +73,6 @@ export default function Recorder(props: {
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef<number>(0);
   const tickRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const stored =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("the-rehearsal:takeNumber")
-        : null;
-    if (stored) {
-      const n = parseInt(stored, 10);
-      if (Number.isFinite(n) && n > 0) setTakeNumber(n);
-    }
-  }, []);
 
   const ensureStream = useCallback(async (): Promise<MediaStream | null> => {
     if (streamRef.current) return streamRef.current;
@@ -117,6 +108,7 @@ export default function Recorder(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When playback begins, start both video and audio.
   useEffect(() => {
     if (status !== "playback") return;
     const v = replayVideoRef.current;
@@ -137,7 +129,7 @@ export default function Recorder(props: {
   const startRecording = useCallback(async () => {
     setErrorMessage(null);
     setReport(null);
-    setInter1(null);
+    setCurrentStripped(null);
     if (replayUrl) {
       URL.revokeObjectURL(replayUrl);
       setReplayUrl(null);
@@ -193,17 +185,30 @@ export default function Recorder(props: {
         form.append("file", blob, `take-${takeNumber}.${ext}`);
         const r1 = await fetch("/api/analyze", { method: "POST", body: form });
         if (!r1.ok) throw new Error(`analyze failed: ${r1.status}`);
-        const inter1Payload = (await r1.json()) as Inter1Payload;
-        setInter1(inter1Payload);
+        const inter1Raw = await r1.json();
+        const stripped = stripInter1Payload(inter1Raw);
+        setCurrentStripped(stripped);
+
+        // Build history payload from prior takes.
+        const historyForCoach = takes.map((t) => ({
+          takeNumber: t.takeNumber,
+          signals: t.signals,
+          engagement: t.engagement,
+          cqiOverall: t.cqiOverall,
+          advice: t.advice,
+        }));
 
         setStatus("composing");
         const r2 = await fetch("/api/coach", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            scenarioTitle: scenario.title,
+            scenario,
             takeNumber,
-            inter1: inter1Payload,
+            history: historyForCoach,
+            inter1: stripped,
+            mode: "continuing",
+            thresholdCqi: THRESHOLD_CQI,
           }),
         });
         if (!r2.ok) throw new Error(`coach failed: ${r2.status}`);
@@ -215,12 +220,32 @@ export default function Recorder(props: {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: reportText }),
         });
-        if (!r3.ok) throw new Error(`tts failed: ${r3.status}`);
-        const audioBlob = await r3.blob();
 
-        setReplayUrl(URL.createObjectURL(blob));
-        setAudioUrl(URL.createObjectURL(audioBlob));
+        // Audio is optional — degrade gracefully if TTS fails.
+        let nextAudioUrl: string | null = null;
+        if (r3.ok) {
+          const audioBlob = await r3.blob();
+          nextAudioUrl = URL.createObjectURL(audioBlob);
+        }
+
+        const nextReplayUrl = URL.createObjectURL(blob);
+        setReplayUrl(nextReplayUrl);
+        setAudioUrl(nextAudioUrl);
         setReport(reportText);
+
+        // Commit the take to history.
+        const cqiOverall = stripped.conversation_quality?.overall?.quality_index;
+        const take: Take = {
+          takeNumber,
+          signals: stripped.signals,
+          engagement: stripped.engagement_state,
+          cqi: stripped.conversation_quality,
+          cqiOverall: typeof cqiOverall === "number" ? cqiOverall : undefined,
+          advice: reportText,
+          recordedAt: Date.now(),
+        };
+        onTakeComplete(take);
+
         setStatus("playback");
       } catch (e) {
         console.error(e);
@@ -230,25 +255,25 @@ export default function Recorder(props: {
         setStatus("error");
       }
     },
-    [takeNumber, scenario.title]
+    [takeNumber, scenario, takes, onTakeComplete]
   );
 
   const nextTake = useCallback(() => {
-    const n = takeNumber + 1;
-    setTakeNumber(n);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("the-rehearsal:takeNumber", String(n));
-    }
     setReport(null);
-    setInter1(null);
+    setCurrentStripped(null);
     if (replayUrl) URL.revokeObjectURL(replayUrl);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setReplayUrl(null);
     setAudioUrl(null);
     setStatus("idle");
-  }, [takeNumber, replayUrl, audioUrl]);
+  }, [replayUrl, audioUrl]);
 
   const beat = ANALYSIS_BEATS[status];
+  const thresholdReached =
+    typeof currentStripped?.conversation_quality?.overall?.quality_index ===
+      "number" &&
+    (currentStripped.conversation_quality.overall.quality_index ?? 0) >=
+      THRESHOLD_CQI;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-6 md:p-10 space-y-5">
@@ -260,8 +285,18 @@ export default function Recorder(props: {
           <h1 className="text-2xl md:text-3xl font-semibold mt-1 leading-tight">
             {scenario.title}
           </h1>
-          <p className="text-sm text-neutral-400 mt-2 max-w-2xl">{scenario.framing}</p>
+          <p className="text-sm text-neutral-400 mt-2 max-w-2xl">
+            {scenario.framing}
+          </p>
         </div>
+        {takes.length > 0 && (
+          <button
+            onClick={onQuit}
+            className="text-xs text-neutral-500 hover:text-neutral-300 self-start whitespace-nowrap"
+          >
+            end the session
+          </button>
+        )}
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -324,7 +359,7 @@ export default function Recorder(props: {
               </div>
             </div>
           )}
-          <SignalPanel inter1={inter1} visible={status === "playback"} />
+          <SignalPanel inter1={currentStripped} visible={status === "playback"} />
         </div>
       </div>
 
@@ -333,11 +368,13 @@ export default function Recorder(props: {
         <p className="text-xs uppercase tracking-widest text-neutral-500 mb-1">
           Scene partner
         </p>
-        <p className="text-neutral-200">&ldquo;{scenario.scenePartnerLine}&rdquo;</p>
+        <p className="text-neutral-200">
+          &ldquo;{scenario.scenePartnerLine}&rdquo;
+        </p>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {status === "idle" && (
           <button
             onClick={startRecording}
@@ -361,6 +398,16 @@ export default function Recorder(props: {
               className="px-5 py-2.5 rounded bg-neutral-100 text-black font-medium hover:bg-white"
             >
               Rehearse again
+            </button>
+            <button
+              onClick={onQuit}
+              className={`px-4 py-2 rounded border ${
+                thresholdReached
+                  ? "border-neutral-300 text-neutral-100 hover:bg-neutral-900"
+                  : "border-neutral-700 text-neutral-400 hover:bg-neutral-900"
+              }`}
+            >
+              {thresholdReached ? "Stop here. You may." : "Stop here"}
             </button>
             {audioUrl && (
               <button
@@ -396,18 +443,23 @@ export default function Recorder(props: {
         )}
       </div>
 
-      {errorMessage && <p className="text-sm text-neutral-400">{errorMessage}</p>}
+      {errorMessage && (
+        <p className="text-sm text-neutral-400">{errorMessage}</p>
+      )}
 
+      {/* Report card with typing animation */}
       {report && status === "playback" && (
         <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
           <p className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
             Rehearsal Report — take {takeNumber}
           </p>
-          <p className="text-neutral-100 leading-relaxed whitespace-pre-wrap">
-            {report}
+          <p className="text-neutral-100 leading-relaxed">
+            <TypedText text={report} />
           </p>
         </div>
       )}
+
+      {takes.length >= 2 && status === "playback" && <Curve takes={takes} />}
 
       {audioUrl && (
         <audio ref={audioRef} src={audioUrl} className="hidden" preload="auto" />
@@ -420,7 +472,7 @@ function SignalPanel({
   inter1,
   visible,
 }: {
-  inter1: Inter1Payload | null;
+  inter1: StrippedInter1 | null;
   visible: boolean;
 }) {
   if (!visible || !inter1) return null;
