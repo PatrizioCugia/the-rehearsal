@@ -1,0 +1,30 @@
+{
+  "name": "the-rehearsal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "verify:inter1": "tsx --env-file=.env.local scripts/verify-inter1.ts",
+    "verify:eleven": "tsx --env-file=.env.local scripts/verify-elevenlabs.ts",
+    "verify:gemini": "tsx --env-file=.env.local scripts/verify-gemini.ts",
+    "verify:coach": "tsx --env-file=.env.local scripts/verify-coach.ts",
+    "verify:all": "npm run verify:inter1 && npm run verify:eleven && npm run verify:gemini && npm run verify:coach"
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

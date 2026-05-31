@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+export async function POST(req: NextRequest) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+  if (!apiKey || !voiceId) {
+    return NextResponse.json(
+      { error: "server_misconfig", message: "ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID not set" },
+      { status: 500 }
+    );
+  }
+
+  let body: { text?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+
+  const text = (body.text ?? "").trim();
+  if (!text) return NextResponse.json({ error: "empty_text" }, { status: 400 });
+
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const t = await res.text();
+    return NextResponse.json(
+      { error: "upstream", status: res.status, body: t.slice(0, 500) },
+      { status: 502 }
+    );
+  }
+
+  const ab = await res.arrayBuffer();
+  return new NextResponse(ab, {
+    status: 200,
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "no-store",
+    },
+  });
+}

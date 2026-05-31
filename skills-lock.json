@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "interhuman-post-processing": {
+      "source": "InterhumanAI/skills",
+      "sourceType": "github",
+      "skillPath": "skills/interhuman-post-processing/SKILL.md",
+      "computedHash": "1f5a053776e0797f378ebbada02db37f235d823359cbcc2760629a68e1f34480"
+    }
+  }
+}
