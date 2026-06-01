@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, readdir } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { extname, resolve } from "node:path";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const FACE_DIR = resolve(process.cwd(), "scripts/fixtures/face");
-const MODEL = "gpt-image-1";
+const MODEL = "nano-banana-pro-preview";
 
 function mimeFor(path: string): string {
   const e = extname(path).toLowerCase();
@@ -15,7 +15,9 @@ function mimeFor(path: string): string {
   return "image/jpeg";
 }
 
-async function loadFaceReferences(): Promise<Array<{ name: string; mime: string; bytes: Buffer }>> {
+async function loadFaceReferences(): Promise<
+  Array<{ inlineData: { mimeType: string; data: string } }>
+> {
   try {
     const entries = await readdir(FACE_DIR);
     const files = entries
@@ -24,9 +26,10 @@ async function loadFaceReferences(): Promise<Array<{ name: string; mime: string;
       .slice(0, 4);
     return Promise.all(
       files.map(async (p) => ({
-        name: basename(p),
-        mime: mimeFor(p),
-        bytes: await readFile(p),
+        inlineData: {
+          mimeType: mimeFor(p),
+          data: (await readFile(p)).toString("base64"),
+        },
       }))
     );
   } catch {
@@ -53,10 +56,10 @@ function buildPrompt(location: string, description: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "server_misconfig", message: "OPENAI_API_KEY not set" },
+      { error: "server_misconfig", message: "GEMINI_API_KEY not set" },
       { status: 500 }
     );
   }
@@ -76,69 +79,48 @@ export async function POST(req: NextRequest) {
 
   try {
     const refs = await loadFaceReferences();
-    const prompt = buildPrompt(location, description);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(
+      apiKey
+    )}`;
 
-    const form = new FormData();
-    form.append("model", MODEL);
-    form.append("prompt", prompt);
-    form.append("size", "1024x1024");
-    form.append("n", "1");
-    for (const r of refs) {
-      form.append(
-        "image[]",
-        new Blob([new Uint8Array(r.bytes)], { type: r.mime }),
-        r.name
-      );
-    }
-
-    const endpoint = refs.length > 0
-      ? "https://api.openai.com/v1/images/edits"
-      : "https://api.openai.com/v1/images/generations";
-
-    let res: Response;
-    if (refs.length > 0) {
-      res = await fetch(endpoint, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-    } else {
-      res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          prompt,
-          n: 1,
-          size: "1024x1024",
-        }),
-      });
-    }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: buildPrompt(location, description) }, ...refs],
+          },
+        ],
+      }),
+    });
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("[image] upstream", res.status, text.slice(0, 800));
+      console.error("[image] upstream", res.status, text.slice(0, 500));
       return NextResponse.json(
-        { error: "upstream", status: res.status, body: text.slice(0, 500) },
+        { error: "upstream", status: res.status },
         { status: 502 }
       );
     }
 
     const json = (await res.json()) as {
-      data?: Array<{ b64_json?: string; url?: string }>;
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ inlineData?: { mimeType: string; data: string } }>;
+        };
+      }>;
     };
-    const item = json.data?.[0];
-    const b64 = item?.b64_json;
-    if (b64) {
-      return NextResponse.json({ image: `data:image/png;base64,${b64}` });
+    const part = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+    if (!part?.inlineData) {
+      return NextResponse.json(
+        { error: "no_image_in_response" },
+        { status: 502 }
+      );
     }
-    if (item?.url) {
-      return NextResponse.json({ image: item.url });
-    }
-    return NextResponse.json({ error: "no_image_in_response" }, { status: 502 });
+    const dataUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    return NextResponse.json({ image: dataUrl });
   } catch (e) {
     console.error("[image] threw", e);
     return NextResponse.json({ error: "exception" }, { status: 502 });
