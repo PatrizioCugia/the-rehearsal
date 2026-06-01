@@ -16,7 +16,7 @@ Multiple takes. A take counter. An improvement curve. The coach proposes escalat
 
 The whole thing is a toy. It is meant to be funny.
 
-## Why I Like It So Much
+## Why 
 
 The comedy lives in the gap between register and stakes. The model gives you a clinical behavioral readout — confidence probability high, hesitation at second eleven, engagement state neutral — and the coach relays these findings with the gravity of a post-surgery debrief. About a coffee.
 
