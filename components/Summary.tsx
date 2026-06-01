@@ -100,16 +100,16 @@ export default function Summary({
   return (
     <div className="w-full max-w-4xl mx-auto p-6 md:p-10 space-y-5">
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-neutral-500">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500">
           End of session
         </p>
-        <h1 className="text-2xl md:text-3xl font-semibold mt-1">
+        <h1 className="text-2xl md:text-3xl font-semibold mt-2 leading-tight tracking-tight">
           {scenario.title}
         </h1>
-        <p className="text-sm text-neutral-400 mt-2">
+        <p className="text-sm text-neutral-400 mt-3 font-mono">
           {takes.length === 1
-            ? "You completed one rehearsal."
-            : `You completed ${takes.length} rehearsals.`}
+            ? "01 rehearsal completed."
+            : `${String(takes.length).padStart(2, "0")} rehearsals completed.`}
         </p>
       </header>
 
@@ -130,14 +130,14 @@ export default function Summary({
 
       <Curve takes={takes} />
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5 min-h-[110px]">
-        <p className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 md:p-8 min-h-[130px]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500 mb-4">
           Final assessment
         </p>
         {composing ? (
           <p className="text-neutral-400">Composing the closing remarks.</p>
         ) : (
-          <p className="text-neutral-100 leading-relaxed">
+          <p className="text-neutral-100 text-[15px] leading-[1.75]">
             <TypedText text={report ?? ""} />
           </p>
         )}

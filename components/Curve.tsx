@@ -19,11 +19,11 @@ export default function Curve({ takes }: { takes: Take[] }) {
 
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
-      <div className="flex items-baseline justify-between mb-3">
-        <p className="text-xs uppercase tracking-widest text-neutral-500">
+      <div className="flex items-baseline justify-between mb-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500">
           Improvement curve
         </p>
-        <div className="flex items-center gap-4 text-[11px] text-neutral-500 font-mono">
+        <div className="flex items-center gap-4 font-mono text-[11px] text-neutral-500">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-2 h-2 bg-neutral-200" /> CQI
           </span>
@@ -39,21 +39,21 @@ export default function Curve({ takes }: { takes: Take[] }) {
             <XAxis
               dataKey="take"
               stroke="#525252"
-              tick={{ fill: "#a3a3a3", fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+              tick={{ fill: "#a3a3a3", fontFamily: "var(--font-mono)", fontSize: 11 }}
               tickLine={false}
               label={{
                 value: "take",
                 position: "insideBottom",
                 offset: -2,
                 fill: "#525252",
-                style: { fontFamily: "ui-monospace, monospace", fontSize: 11 },
+                style: { fontFamily: "var(--font-mono)", fontSize: 11 },
               }}
             />
             <YAxis
               yAxisId="left"
               domain={[0, 100]}
               stroke="#525252"
-              tick={{ fill: "#a3a3a3", fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+              tick={{ fill: "#a3a3a3", fontFamily: "var(--font-mono)", fontSize: 11 }}
               tickLine={false}
               width={36}
             />
@@ -61,7 +61,7 @@ export default function Curve({ takes }: { takes: Take[] }) {
               yAxisId="right"
               orientation="right"
               stroke="#525252"
-              tick={{ fill: "#a3a3a3", fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+              tick={{ fill: "#a3a3a3", fontFamily: "var(--font-mono)", fontSize: 11 }}
               tickLine={false}
               width={36}
             />
@@ -69,7 +69,7 @@ export default function Curve({ takes }: { takes: Take[] }) {
               contentStyle={{
                 background: "#0a0a0a",
                 border: "1px solid #262626",
-                fontFamily: "ui-monospace, monospace",
+                fontFamily: "var(--font-mono)",
                 fontSize: 11,
               }}
               labelStyle={{ color: "#a3a3a3" }}

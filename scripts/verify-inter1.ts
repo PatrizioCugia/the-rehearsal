@@ -1,93 +1,176 @@
-import { readFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
-import { requireEnv, logShape } from "./_util";
-
 /**
- * Verify Inter-1 upload endpoint.
+ * Direct, raw verification of Inter-1's upload endpoint.
  *
- * POST https://api.interhuman.ai/v1/upload/analyze
- *   multipart: file=<binary>, optional include[]=conversation_quality_overall|timeline
- *   Auth: Bearer <INTERHUMAN_API_KEY>
+ * Hits POST https://api.interhuman.ai/v1/upload/analyze with a real clip and
+ * prints the complete unmodified JSON, so the true signal-object shape is
+ * unambiguous. Does NOT go through /api/analyze, mock mode, or any app strip
+ * helper — this is the only way to see what Inter-1 actually returns.
  *
  * Usage:
- *   npm run verify:inter1 -- ./path/to/clip.webm
- *
- * If no path is given, defaults to scripts/fixtures/test-clip.webm.
- * File must be 10KB–32MB and one of: mp4, avi, mov, mkv, mpeg-ts, mpeg-2-ts, webm.
+ *   npx tsx --env-file=.env.local scripts/verify-inter1.ts <path-to-clip>
+ *   npm run verify:inter1 -- <path-to-clip>
  */
-const apiKey = requireEnv("INTERHUMAN_API_KEY");
 
-const argPath = process.argv[2];
-const clipPath = resolve(argPath ?? "scripts/fixtures/test-clip.webm");
+import { readFile, stat } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
 
-let buf: Buffer;
-try {
-  buf = await readFile(clipPath);
-} catch (err) {
-  console.error(
-    `[inter1] could not read clip at ${clipPath}.\n` +
-      `Pass a path: npm run verify:inter1 -- ./path/to/clip.webm`
-  );
-  console.error(err);
-  process.exit(2);
-}
-
-if (buf.byteLength < 10 * 1024) {
-  console.error(`[inter1] clip too small (${buf.byteLength}B). Minimum 10KB.`);
-  process.exit(2);
-}
-if (buf.byteLength > 32 * 1024 * 1024) {
-  console.error(`[inter1] clip too large (${buf.byteLength}B). Maximum 32MB.`);
-  process.exit(2);
-}
-
-const ext = clipPath.split(".").pop()?.toLowerCase() ?? "";
-const mimeByExt: Record<string, string> = {
+const MIN_BYTES = 10 * 1024;
+const MAX_BYTES = 32 * 1024 * 1024;
+const ALLOWED_EXTS = new Set(["mp4", "avi", "mov", "mkv", "ts", "m2ts", "webm"]);
+const MIME_BY_EXT: Record<string, string> = {
   mp4: "video/mp4",
   webm: "video/webm",
   mov: "video/quicktime",
   mkv: "video/x-matroska",
   avi: "video/x-msvideo",
+  ts: "video/mp2t",
+  m2ts: "video/mp2t",
 };
-const mime = mimeByExt[ext] ?? "application/octet-stream";
+
+function bail(msg: string, code = 2): never {
+  console.error(`[inter1] ${msg}`);
+  process.exit(code);
+}
+
+const apiKey = process.env.INTERHUMAN_API_KEY;
+if (!apiKey) {
+  bail("INTERHUMAN_API_KEY is not set. Load .env.local before running.");
+}
+
+const argPath = process.argv[2];
+if (!argPath) {
+  bail(
+    "no clip path supplied.\n" +
+      "  usage: npx tsx --env-file=.env.local scripts/verify-inter1.ts <path-to-clip>"
+  );
+}
+
+const clipPath = resolve(argPath);
+
+let info: Awaited<ReturnType<typeof stat>>;
+try {
+  info = await stat(clipPath);
+} catch {
+  bail(`file not found at ${clipPath}`);
+}
+if (!info.isFile()) bail(`not a regular file: ${clipPath}`);
+const size = info.size;
+if (size < MIN_BYTES) bail(`clip too small (${size}B). Minimum is ${MIN_BYTES}B.`);
+if (size > MAX_BYTES) bail(`clip too large (${size}B). Maximum is ${MAX_BYTES}B.`);
+
+const ext = extname(clipPath).replace(".", "").toLowerCase();
+if (!ALLOWED_EXTS.has(ext)) {
+  bail(
+    `extension "${ext}" not in allowed list: ${[...ALLOWED_EXTS].join(", ")}`
+  );
+}
+const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
+
+const buf = await readFile(clipPath);
 
 const form = new FormData();
-form.append("file", new Blob([new Uint8Array(buf)], { type: mime }), basename(clipPath));
+form.append(
+  "file",
+  new Blob([new Uint8Array(buf)], { type: mime }),
+  basename(clipPath)
+);
 form.append("include[]", "conversation_quality_overall");
 form.append("include[]", "conversation_quality_timeline");
 
-console.log(`[inter1] POST /v1/upload/analyze  file=${basename(clipPath)} (${buf.byteLength}B, ${mime})`);
+console.log("─".repeat(72));
+console.log(`POST https://api.interhuman.ai/v1/upload/analyze`);
+console.log(`  file:  ${basename(clipPath)}`);
+console.log(`  size:  ${size} bytes`);
+console.log(`  mime:  ${mime}`);
+console.log(`  include[]: conversation_quality_overall, conversation_quality_timeline`);
+console.log("─".repeat(72));
 
+const startedAt = Date.now();
 const res = await fetch("https://api.interhuman.ai/v1/upload/analyze", {
   method: "POST",
   headers: { Authorization: `Bearer ${apiKey}` },
   body: form,
 });
+const elapsedMs = Date.now() - startedAt;
 
-const text = await res.text();
-let json: unknown;
+console.log(`\nHTTP ${res.status} ${res.statusText}   (${elapsedMs} ms)`);
+
+const raw = await res.text();
+
+let parsed: unknown;
 try {
-  json = JSON.parse(text);
+  parsed = JSON.parse(raw);
 } catch {
-  console.error(`[inter1] non-JSON response (status ${res.status}):`);
-  console.error(text.slice(0, 1000));
+  console.error("\nResponse was not JSON. Raw body:");
+  console.error(raw);
   process.exit(1);
 }
 
 if (!res.ok) {
-  console.error(`[inter1] HTTP ${res.status}`);
-  logShape("error body", json);
+  console.error("\nError envelope (raw):");
+  console.error(JSON.stringify(parsed, null, 2));
+  const e = parsed as Record<string, unknown>;
+  console.error("\nFields:");
+  console.error(`  error_id:        ${String(e.error_id ?? "—")}`);
+  console.error(`  message:         ${String(e.message ?? "—")}`);
+  console.error(`  correlation_id:  ${String(e.correlation_id ?? "—")}`);
+  console.error(`  link:            ${String(e.link ?? "—")}`);
   process.exit(1);
 }
 
-logShape("inter1 response", json);
+// ────────────────────────────────────────────────────────────
+// Full raw payload, nothing omitted.
+// ────────────────────────────────────────────────────────────
+console.log("\n=== FULL RAW PAYLOAD (unmodified) ===");
+console.log(JSON.stringify(parsed, null, 2));
 
-const signals = (json as { signals?: Array<{ type: string; start: number; end: number }> }).signals;
-if (Array.isArray(signals)) {
-  console.log(`[inter1] OK — ${signals.length} signals`);
-  for (const s of signals.slice(0, 5)) {
-    console.log(`  ${s.type}  [${s.start}s → ${s.end}s]`);
+// ────────────────────────────────────────────────────────────
+// Definitive signal-shape proof.
+// ────────────────────────────────────────────────────────────
+const obj = parsed as Record<string, unknown>;
+const signals = Array.isArray(obj.signals) ? (obj.signals as Array<Record<string, unknown>>) : [];
+
+console.log("\n=== SIGNAL SHAPE PROOF ===");
+console.log(`signals is an array of length: ${signals.length}`);
+if (signals.length > 0) {
+  const s0 = signals[0]!;
+  const keys = Object.keys(s0).sort();
+  console.log(`Object.keys(signals[0]) = ${JSON.stringify(keys)}`);
+  console.log(`signals[0] =`);
+  console.log(JSON.stringify(s0, null, 2));
+
+  // Explicitly answer the open question.
+  const expectedBare = ["end", "start", "type"];
+  const isBare =
+    keys.length === 3 &&
+    expectedBare.every((k) => keys.includes(k));
+  console.log(
+    `\nDoes signals[0] match the documented bare {type,start,end} shape? ${
+      isBare ? "YES" : "NO"
+    }`
+  );
+  if (!isBare) {
+    const extra = keys.filter((k) => !expectedBare.includes(k));
+    console.log(`Extra keys present: ${JSON.stringify(extra)}`);
   }
 } else {
-  console.warn("[inter1] response missing `signals` array — see body above.");
+  console.log("(no signals to inspect — shape cannot be determined from this clip)");
 }
+
+// ────────────────────────────────────────────────────────────
+// One-line summary.
+// ────────────────────────────────────────────────────────────
+const types = signals.map((s) => String(s.type));
+const engagementPresent = Array.isArray(obj.engagement_state)
+  ? `yes (${(obj.engagement_state as unknown[]).length} windows)`
+  : "no";
+const cqi =
+  obj.conversation_quality && typeof obj.conversation_quality === "object"
+    ? "yes"
+    : "no";
+
+console.log("\n=== SUMMARY ===");
+console.log(`signals:           ${signals.length}`);
+console.log(`signal types:      ${types.length ? types.join(", ") : "(none)"}`);
+console.log(`engagement_state:  ${engagementPresent}`);
+console.log(`conversation_quality: ${cqi}`);

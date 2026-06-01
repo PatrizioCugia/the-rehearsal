@@ -125,10 +125,12 @@ export default function Onboarding(props: {
   return (
     <div className="w-full max-w-2xl mx-auto p-6 md:p-10 flex flex-col gap-6 min-h-screen">
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-neutral-500">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500">
           Rehearsal — Intake
         </p>
-        <h1 className="text-2xl font-semibold mt-1">Before we begin.</h1>
+        <h1 className="text-2xl font-semibold mt-2 leading-tight tracking-tight">
+          Before we begin.
+        </h1>
       </header>
 
       <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
@@ -152,18 +154,21 @@ export default function Onboarding(props: {
       </div>
 
       {step === "location" && (
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-widest text-neutral-500">
+        <div className="space-y-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500">
             Or select one of the prepared rehearsals.
           </p>
           <div className="flex flex-col gap-2">
-            {PRESETS.map((p) => (
+            {PRESETS.map((p, i) => (
               <button
                 key={p.id}
                 onClick={() => selectPreset(p)}
-                className="text-left px-4 py-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 hover:bg-neutral-900 hover:border-neutral-700 text-sm"
+                className="text-left px-4 py-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 hover:bg-neutral-900 hover:border-neutral-700 text-sm flex items-baseline gap-3"
               >
-                {p.label}
+                <span className="font-mono text-[10px] text-neutral-600">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span>{p.label}</span>
               </button>
             ))}
           </div>

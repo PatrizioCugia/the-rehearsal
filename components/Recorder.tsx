@@ -306,13 +306,13 @@ export default function Recorder(props: {
     <div className="w-full max-w-6xl mx-auto p-6 md:p-10 space-y-5">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-neutral-500">
-            Rehearsal #{takeNumber}
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500">
+            Rehearsal № <span className="text-neutral-300">{String(takeNumber).padStart(2, "0")}</span>
           </p>
-          <h1 className="text-2xl md:text-3xl font-semibold mt-1 leading-tight">
+          <h1 className="text-2xl md:text-3xl font-semibold mt-2 leading-tight tracking-tight">
             {scenario.title}
           </h1>
-          <p className="text-sm text-neutral-400 mt-2 max-w-2xl">
+          <p className="text-sm text-neutral-400 mt-3 max-w-2xl leading-relaxed">
             {scenario.framing}
           </p>
         </div>
@@ -371,7 +371,7 @@ export default function Recorder(props: {
             />
           )}
           {status === "recording" && (
-            <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 rounded bg-black/70 text-xs">
+            <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 rounded bg-black/70 font-mono text-[11px] tracking-wider">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               <span>{(elapsedMs / 1000).toFixed(1)}s</span>
             </div>
@@ -380,9 +380,9 @@ export default function Recorder(props: {
             status === "composing" ||
             status === "voicing") && (
             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-3">
                 <p className="text-neutral-200 text-lg">{beat}</p>
-                <p className="text-neutral-600 text-xs uppercase tracking-widest">
+                <p className="font-mono text-neutral-600 text-[11px] uppercase tracking-[0.25em]">
                   Please wait.
                 </p>
               </div>
@@ -393,11 +393,11 @@ export default function Recorder(props: {
       </div>
 
       {/* Scene partner line */}
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-        <p className="text-xs uppercase tracking-widest text-neutral-500 mb-1">
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500 mb-2">
           Scene partner
         </p>
-        <p className="text-neutral-200">
+        <p className="text-neutral-200 leading-relaxed">
           &ldquo;{scenario.scenePartnerLine}&rdquo;
         </p>
       </div>
@@ -478,11 +478,14 @@ export default function Recorder(props: {
 
       {/* Report card with typing animation */}
       {report && status === "playback" && (
-        <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
-          <p className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
-            Rehearsal Report — take {takeNumber}
+        <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-6 md:p-8">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-500 mb-4">
+            Rehearsal Report —{" "}
+            <span className="text-neutral-300">
+              take {String(takeNumber).padStart(2, "0")}
+            </span>
           </p>
-          <p className="text-neutral-100 leading-relaxed">
+          <p className="text-neutral-100 text-[15px] leading-[1.75]">
             <TypedText text={report} />
           </p>
         </div>
@@ -508,21 +511,23 @@ function SignalPanel({
   const cqi = inter1.conversation_quality?.overall?.quality_index;
   const signals = inter1.signals.slice(0, 6);
   return (
-    <div className="absolute bottom-3 right-3 w-[44%] max-w-[260px] rounded-md bg-black/85 border border-neutral-700 backdrop-blur-sm p-3 text-[11px] leading-snug">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="uppercase tracking-widest text-neutral-500">Signals</span>
+    <div className="absolute bottom-3 right-3 w-[46%] max-w-[280px] rounded-md bg-black/85 border border-neutral-700 backdrop-blur-sm p-3.5 font-mono text-[11px] leading-snug">
+      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-neutral-800">
+        <span className="uppercase tracking-[0.25em] text-neutral-500">Signals</span>
         {typeof cqi === "number" && (
-          <span className="text-neutral-300">CQI {cqi.toFixed(0)}</span>
+          <span className="text-neutral-300">
+            CQI <span className="text-neutral-100">{cqi.toFixed(0)}</span>
+          </span>
         )}
       </div>
       {signals.length === 0 ? (
         <p className="text-neutral-500">None detected.</p>
       ) : (
-        <ul className="space-y-0.5">
+        <ul className="space-y-1">
           {signals.map((s, i) => (
             <li key={i} className="flex justify-between text-neutral-300">
               <span>{s.type}</span>
-              <span className="text-neutral-500 tabular-nums">
+              <span className="text-neutral-500">
                 {s.start.toFixed(0)}–{s.end.toFixed(0)}s
               </span>
             </li>

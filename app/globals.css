@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/*
+ * Wire next/font CSS variables into Tailwind v4 so `font-sans` / `font-mono`
+ * utilities use Inter and IBM Plex Mono everywhere.
+ */
+@theme {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono",
+    Consolas, "Liberation Mono", Menlo, monospace;
+}
+
 :root {
   --background: #0a0a0a;
   --foreground: #ededed;
@@ -9,6 +20,15 @@ html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11"; /* Inter: subtle alternates for a quieter feel */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numerics by default on monospace data — column alignment in the curve and signal panel. */
+.font-mono,
+code,
+pre {
+  font-variant-numeric: tabular-nums;
 }

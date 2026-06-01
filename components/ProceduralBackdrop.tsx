@@ -104,7 +104,7 @@ export default function ProceduralBackdrop({
               y={c.y + CARD_H / 2 + 4}
               textAnchor="middle"
               fontSize="10"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
+              fontFamily="var(--font-mono)"
               fill="#a3a3a3"
               letterSpacing="0.1em"
             >
@@ -119,7 +119,7 @@ export default function ProceduralBackdrop({
           y="424"
           textAnchor="middle"
           fontSize="8"
-          fontFamily="ui-monospace, SFMono-Regular, monospace"
+          fontFamily="var(--font-mono)"
           fill="#525252"
           letterSpacing="0.2em"
         >
