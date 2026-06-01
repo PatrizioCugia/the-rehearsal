@@ -7,6 +7,7 @@ import Curve from "./Curve";
 import TypedText from "./TypedText";
 import ProceduralBackdrop from "./ProceduralBackdrop";
 import { isMockMode } from "@/lib/mock";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 export default function Summary({
   scenario,
@@ -30,48 +31,59 @@ export default function Summary({
     requestedRef.current = true;
     const last = takes[takes.length - 1];
     void (async () => {
+      let reportText = "The session has concluded. The record will be retained.";
       try {
-        const r = await fetch("/api/coach", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            scenario,
-            takeNumber: last?.takeNumber ?? takes.length,
-            history: takes.slice(0, -1).map((t) => ({
-              takeNumber: t.takeNumber,
-              signals: t.signals,
-              engagement: t.engagement,
-              cqiOverall: t.cqiOverall,
-              advice: t.advice,
-            })),
-            inter1: {
-              signals: last?.signals ?? [],
-              engagement_state: last?.engagement,
-              conversation_quality: last?.cqi,
-            },
-            mode: "stopping",
-          }),
-        });
+        const r = await fetchWithTimeout(
+          "/api/coach",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scenario,
+              takeNumber: last?.takeNumber ?? takes.length,
+              history: takes.slice(0, -1).map((t) => ({
+                takeNumber: t.takeNumber,
+                signals: t.signals,
+                engagement: t.engagement,
+                cqiOverall: t.cqiOverall,
+                advice: t.advice,
+              })),
+              inter1: {
+                signals: last?.signals ?? [],
+                engagement_state: last?.engagement,
+                conversation_quality: last?.cqi,
+              },
+              mode: "stopping",
+            }),
+          },
+          30_000
+        );
         const j = (await r.json()) as { report?: string };
-        const reportText =
-          j.report?.trim() ||
-          "The session has concluded. The record will be retained.";
-        setReport(reportText);
+        if (j.report?.trim()) reportText = j.report.trim();
+      } catch (coachErr) {
+        console.warn("[summary coach] fell back:", coachErr);
+      }
+      setReport(reportText);
 
-        const t = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: reportText }),
-        });
+      // TTS isolated so a timeout does not block the final assessment display.
+      try {
+        const t = await fetchWithTimeout(
+          "/api/tts",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: reportText }),
+          },
+          20_000
+        );
         if (t.ok) {
           const blob = await t.blob();
           setAudioUrl(URL.createObjectURL(blob));
         }
-      } catch {
-        setReport("The session has concluded. The record will be retained.");
-      } finally {
-        setComposing(false);
+      } catch (ttsErr) {
+        console.warn("[summary tts] skipped:", ttsErr);
       }
+      setComposing(false);
     })();
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
