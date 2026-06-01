@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "vitest run",
     "verify:inter1": "tsx --env-file=.env.local scripts/verify-inter1.ts",
     "verify:eleven": "tsx --env-file=.env.local scripts/verify-elevenlabs.ts",
     "verify:gemini": "tsx --env-file=.env.local scripts/verify-gemini.ts",
@@ -34,6 +35,7 @@
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "typescript-eslint": "^8.60.0"
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^4.1.8"
   }
 }

@@ -10,19 +10,12 @@ import {
   YAxis,
 } from "recharts";
 import type { Take } from "@/lib/session";
-import { totalHesitationSeconds } from "@/lib/session";
+import { buildCurveData } from "@/lib/curve-data";
 
 export default function Curve({ takes }: { takes: Take[] }) {
   if (takes.length < 2) return null;
 
-  const data = takes.map((t) => ({
-    take: t.takeNumber,
-    cqi:
-      typeof t.cqiOverall === "number"
-        ? Math.round(t.cqiOverall * 10) / 10
-        : null,
-    hesitation: Math.round(totalHesitationSeconds(t) * 10) / 10,
-  }));
+  const data = buildCurveData(takes);
 
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">

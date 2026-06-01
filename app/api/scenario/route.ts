@@ -5,43 +5,12 @@ import {
 } from "@/lib/scenario-prompt";
 import { isMockMode } from "@/lib/mock";
 import { mockScenario } from "@/lib/mock/scenario";
+import { tryParseScenario, FALLBACK_SCENARIO_API } from "@/lib/scenario-parse";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export type Scenario = {
-  title: string;
-  scenePartnerLine: string;
-  framing: string;
-};
-
-const FALLBACK: Scenario = {
-  title: "An interaction the person has decided to prepare for.",
-  scenePartnerLine: "Have a seat.",
-  framing:
-    "The details have been omitted. The rehearsal will proceed without them.",
-};
-
-function tryParseScenario(text: string): Scenario | null {
-  // Strip code fences if the model included them.
-  let t = text.trim();
-  if (t.startsWith("```")) {
-    t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-  }
-  try {
-    const obj = JSON.parse(t) as Partial<Scenario>;
-    if (obj && obj.title && obj.scenePartnerLine && obj.framing) {
-      return {
-        title: String(obj.title),
-        scenePartnerLine: String(obj.scenePartnerLine),
-        framing: String(obj.framing),
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  return null;
-}
+const FALLBACK = FALLBACK_SCENARIO_API;
 
 export async function POST(req: NextRequest) {
   let body: { location?: string; description?: string };
