@@ -118,7 +118,7 @@ export default function Summary({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={setImageUrl}
-            alt="The rehearsal set."
+            alt={`A photograph of the rehearsal set composed for the scenario: ${scenario.title}`}
             className="w-full h-auto object-cover"
           />
         </div>

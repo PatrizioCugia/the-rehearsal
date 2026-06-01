@@ -319,6 +319,7 @@ export default function Recorder(props: {
         {takes.length > 0 && (
           <button
             onClick={onQuit}
+            aria-label="End the rehearsal session and view the summary"
             className="text-xs text-neutral-500 hover:text-neutral-300 self-start whitespace-nowrap"
           >
             end the session
@@ -333,7 +334,7 @@ export default function Recorder(props: {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={setImageUrl}
-              alt="The rehearsal set."
+              alt={`A photograph of the rehearsal set composed for the scenario: ${scenario.title}`}
               className="w-full h-full object-cover"
             />
           ) : isMockMode() ? (
@@ -379,7 +380,11 @@ export default function Recorder(props: {
           {(status === "analyzing" ||
             status === "composing" ||
             status === "voicing") && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/80 flex items-center justify-center"
+              role="status"
+              aria-live="polite"
+            >
               <div className="text-center space-y-3">
                 <p className="text-neutral-200 text-lg">{beat}</p>
                 <p className="font-mono text-neutral-600 text-[11px] uppercase tracking-[0.25em]">

@@ -32,3 +32,15 @@ code,
 pre {
   font-variant-numeric: tabular-nums;
 }
+
+/* Visible focus ring for keyboard users on every interactive element.
+   Hidden from mouse users (:focus-visible only matches keyboard focus). */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #a3a3a3;
+  outline-offset: 2px;
+}
