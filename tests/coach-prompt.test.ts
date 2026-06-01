@@ -107,3 +107,32 @@ describe("buildCoachUserMessage — threshold logic", () => {
     expect(msg).not.toContain("personal threshold");
   });
 });
+
+describe("buildCoachUserMessage — rationale-on payload makes it into the prompt", () => {
+  it("includes the rationale text verbatim in the JSON block so the coach can cite it", () => {
+    const richInter1: StrippedInter1 = {
+      signals: [
+        {
+          type: "agreement",
+          start: 0,
+          end: 5,
+          probability: "high",
+          rationale:
+            "the person nodded warmly and said \"Andando, perfetto\".",
+        },
+      ],
+      conversation_quality: { overall: { quality_index: 56 } },
+    };
+    const msg = buildCoachUserMessage({
+      scenario: SCENARIO,
+      takeNumber: 1,
+      history: [],
+      inter1: richInter1,
+      mode: "continuing",
+      thresholdCqi: 75,
+    });
+    expect(msg).toContain("\"probability\": \"high\"");
+    expect(msg).toContain("Andando, perfetto");
+    expect(msg).toContain("\"rationale\"");
+  });
+});

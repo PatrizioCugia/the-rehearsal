@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COACH_SYSTEM_PROMPT, buildCoachUserMessage } from "@/lib/coach-prompt";
+import {
+  COACH_SYSTEM_PROMPT,
+  COACH_SYSTEM_PROMPT_RICH,
+  buildCoachUserMessage,
+} from "@/lib/coach-prompt";
 import type { CoachMode } from "@/lib/coach-prompt";
 import {
   stripInter1Payload,
@@ -7,6 +11,15 @@ import {
 } from "@/lib/coach-payload";
 import { isMockMode } from "@/lib/mock";
 import { mockCoachLine, pickFallbackCoachLine } from "@/lib/mock/coach";
+
+/**
+ * Read at request time so flipping USE_RATIONALE between dev-server starts
+ * actually changes behavior. Server-only (no NEXT_PUBLIC_ prefix) — never
+ * exposed to the client bundle.
+ */
+function shouldUseRationale(): boolean {
+  return process.env.USE_RATIONALE === "true";
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,14 +44,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
-  const inter1 = stripInter1Payload(body.inter1);
-  const history = stripHistoryEntries(body.history);
+  const useRationale = shouldUseRationale();
+  const stripOpts = { includeRationale: useRationale };
+  const inter1 = stripInter1Payload(body.inter1, stripOpts);
+  const history = stripHistoryEntries(body.history, stripOpts);
   const takeNumber = body.takeNumber ?? 1;
   const mode: CoachMode = body.mode === "stopping" ? "stopping" : "continuing";
   const thresholdCqi =
     typeof body.thresholdCqi === "number"
       ? body.thresholdCqi
       : DEFAULT_THRESHOLD_CQI;
+  const systemPrompt = useRationale
+    ? COACH_SYSTEM_PROMPT_RICH
+    : COACH_SYSTEM_PROMPT;
 
   // MOCK_MODE: short-circuit with a canned in-register line.
   if (isMockMode()) {
@@ -94,7 +112,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 500,
-        system: COACH_SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
     });

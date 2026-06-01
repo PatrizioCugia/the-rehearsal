@@ -115,3 +115,104 @@ describe("stripHistoryEntries — same guardrail extended to prior takes", () =>
     expect(stripHistoryEntries("nope")).toEqual([]);
   });
 });
+
+describe("includeRationale=true — flag-on path", () => {
+  const rawPayload = {
+    signals: [
+      {
+        type: "agreement",
+        start: 0,
+        end: 5,
+        probability: "high",
+        rationale: "the person nodded warmly and said \"Andando, perfetto\".",
+        spurious: "still dropped",
+      },
+      {
+        type: "stress",
+        start: 20,
+        end: 25,
+        probability: "medium",
+        rationale: "the person blinked frequently and touched his face.",
+      },
+      {
+        // missing rationale + probability — must still strip cleanly
+        type: "interest",
+        start: 12,
+        end: 17,
+      },
+    ],
+    engagement_state: [{ state: "engaged", start: 0, end: 25 }],
+    conversation_quality: { overall: { quality_index: 56 } },
+  };
+
+  it("preserves probability and rationale on each signal that has them", () => {
+    const out = stripInter1Payload(rawPayload, { includeRationale: true });
+    expect(out.signals).toHaveLength(3);
+    expect(out.signals[0]).toMatchObject({
+      type: "agreement",
+      start: 0,
+      end: 5,
+      probability: "high",
+      rationale: "the person nodded warmly and said \"Andando, perfetto\".",
+    });
+    expect(out.signals[1].probability).toBe("medium");
+    // signal without rationale/probability has them undefined, not invented.
+    expect(out.signals[2].rationale).toBeUndefined();
+    expect(out.signals[2].probability).toBeUndefined();
+  });
+
+  it("still drops fields outside the whitelisted set even with the flag on", () => {
+    const out = stripInter1Payload(rawPayload, { includeRationale: true });
+    const serialized = JSON.stringify(out);
+    expect(serialized).not.toContain("spurious");
+    expect(serialized).not.toContain("still dropped");
+  });
+
+  it("rejects probability values that aren't low/medium/high", () => {
+    const out = stripInter1Payload(
+      {
+        signals: [
+          { type: "x", start: 0, end: 1, probability: "very-high", rationale: "ok" },
+        ],
+      },
+      { includeRationale: true }
+    );
+    expect(out.signals[0].probability).toBeUndefined();
+    expect(out.signals[0].rationale).toBe("ok");
+  });
+
+  it("with the flag OFF (the existing demo path), rationale and probability are GONE — verifies default unchanged", () => {
+    const out = stripInter1Payload(rawPayload); // no opts == default
+    const serialized = JSON.stringify(out);
+    expect(serialized).not.toContain("rationale");
+    expect(serialized).not.toContain("probability");
+    expect(serialized).not.toContain("Andando");
+    for (const s of out.signals) {
+      expect(Object.keys(s).sort()).toEqual(["end", "start", "type"]);
+    }
+  });
+
+  it("history entries respect includeRationale=true too", () => {
+    const out = stripHistoryEntries(
+      [
+        {
+          takeNumber: 1,
+          cqiOverall: 38,
+          advice: "Rehearsal one is complete.",
+          signals: [
+            {
+              type: "hesitation",
+              start: 3,
+              end: 9,
+              probability: "high",
+              rationale: "leak me through, this time.",
+            },
+          ],
+        },
+      ],
+      { includeRationale: true }
+    );
+    expect(out[0]!.signals[0]!.rationale).toContain("leak me through");
+    expect(out[0]!.signals[0]!.probability).toBe("high");
+  });
+});

@@ -5,7 +5,17 @@
  * transcript fields, they get filtered both places.
  */
 
-export type Inter1Signal = { type: string; start: number; end: number };
+export type Inter1Signal = {
+  type: string;
+  start: number;
+  end: number;
+  // Populated only when stripped with includeRationale=true. When the flag is
+  // off, these keys are never assigned, so Object.keys(signal) stays exactly
+  // ["end","start","type"] and the documented bare-shape contract still holds.
+  probability?: "low" | "medium" | "high";
+  rationale?: string;
+};
+
 export type Inter1Engagement = { state: string; start: number; end: number };
 export type Inter1CQI = {
   overall?: Record<string, number>;
@@ -30,16 +40,49 @@ export type HistoryEntryForCoach = {
   advice: string;
 };
 
-export function stripInter1Payload(raw: unknown): StrippedInter1 {
+export type StripOptions = {
+  /**
+   * When true, allow `probability` and `rationale` to survive on each signal.
+   * Default false — preserves the original strict-strip behavior that 21
+   * existing tests pin and that the flag-off demo path depends on.
+   */
+  includeRationale?: boolean;
+};
+
+function stripSignals(
+  raw: unknown,
+  opts: StripOptions
+): Inter1Signal[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Array<Record<string, unknown>>).map((s) => {
+    const out: Inter1Signal = {
+      type: String(s.type ?? ""),
+      start: Number(s.start ?? 0),
+      end: Number(s.end ?? 0),
+    };
+    if (opts.includeRationale) {
+      if (
+        typeof s.probability === "string" &&
+        (s.probability === "low" ||
+          s.probability === "medium" ||
+          s.probability === "high")
+      ) {
+        out.probability = s.probability;
+      }
+      if (typeof s.rationale === "string" && s.rationale.length > 0) {
+        out.rationale = s.rationale;
+      }
+    }
+    return out;
+  });
+}
+
+export function stripInter1Payload(
+  raw: unknown,
+  opts: StripOptions = {}
+): StrippedInter1 {
   const src = (raw ?? {}) as Record<string, unknown>;
-  const signals = Array.isArray(src.signals)
-    ? (src.signals as Array<Record<string, unknown>>).map((s) => ({
-        type: String(s.type ?? ""),
-        start: Number(s.start ?? 0),
-        end: Number(s.end ?? 0),
-      }))
-    : [];
-  const out: StrippedInter1 = { signals };
+  const out: StrippedInter1 = { signals: stripSignals(src.signals, opts) };
   if (Array.isArray(src.engagement_state)) {
     out.engagement_state = (src.engagement_state as Array<Record<string, unknown>>).map(
       (e) => ({
@@ -55,16 +98,12 @@ export function stripInter1Payload(raw: unknown): StrippedInter1 {
   return out;
 }
 
-export function stripHistoryEntries(raw: unknown): HistoryEntryForCoach[] {
+export function stripHistoryEntries(
+  raw: unknown,
+  opts: StripOptions = {}
+): HistoryEntryForCoach[] {
   if (!Array.isArray(raw)) return [];
   return (raw as Array<Record<string, unknown>>).map((h) => {
-    const signals = Array.isArray(h.signals)
-      ? (h.signals as Array<Record<string, unknown>>).map((s) => ({
-          type: String(s.type ?? ""),
-          start: Number(s.start ?? 0),
-          end: Number(s.end ?? 0),
-        }))
-      : [];
     const engagement = Array.isArray(h.engagement)
       ? (h.engagement as Array<Record<string, unknown>>).map((e) => ({
           state: String(e.state ?? ""),
@@ -74,7 +113,7 @@ export function stripHistoryEntries(raw: unknown): HistoryEntryForCoach[] {
       : undefined;
     return {
       takeNumber: Number(h.takeNumber ?? 0),
-      signals,
+      signals: stripSignals(h.signals, opts),
       engagement,
       cqiOverall: typeof h.cqiOverall === "number" ? h.cqiOverall : undefined,
       advice: String(h.advice ?? ""),
