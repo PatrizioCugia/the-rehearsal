@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, readdir } from "node:fs/promises";
 import { extname, resolve } from "node:path";
+import { isMockMode } from "@/lib/mock";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -56,6 +57,13 @@ function buildPrompt(location: string, description: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  if (isMockMode()) {
+    // In MOCK_MODE the client renders a procedural SVG backdrop. We return
+    // null so the client falls back to that path without rendering the
+    // "set could not be constructed" copy.
+    return NextResponse.json({ image: null, procedural: true });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(

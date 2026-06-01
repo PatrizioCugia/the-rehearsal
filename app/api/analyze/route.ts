@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isMockMode } from "@/lib/mock";
+import { mockInter1ForTake } from "@/lib/mock/inter1";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const incoming = await req.formData();
+  const file = incoming.get("file");
+  const takeField = incoming.get("takeNumber");
+  const takeNumber =
+    typeof takeField === "string" ? parseInt(takeField, 10) || 1 : 1;
+
+  if (isMockMode()) {
+    // Short-circuit: no Inter-1 call, return a per-take canned payload.
+    return NextResponse.json(mockInter1ForTake(takeNumber));
+  }
+
   const apiKey = process.env.INTERHUMAN_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -12,8 +25,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const incoming = await req.formData();
-  const file = incoming.get("file");
   if (!(file instanceof Blob)) {
     return NextResponse.json(
       { error: "bad_request", message: "missing file" },

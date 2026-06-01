@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isMockMode } from "@/lib/mock";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  if (isMockMode()) {
+    // No audio in MOCK_MODE. The Recorder treats this as a benign TTS skip
+    // and shows the report text alone.
+    return NextResponse.json({ skipped: "mock_mode" }, { status: 503 });
+  }
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const voiceId = process.env.ELEVENLABS_VOICE_ID;
   if (!apiKey || !voiceId) {

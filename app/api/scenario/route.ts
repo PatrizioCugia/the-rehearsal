@@ -3,6 +3,8 @@ import {
   SCENARIO_SYSTEM_PROMPT,
   buildScenarioUserMessage,
 } from "@/lib/scenario-prompt";
+import { isMockMode } from "@/lib/mock";
+import { mockScenario } from "@/lib/mock/scenario";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,14 +44,6 @@ function tryParseScenario(text: string): Scenario | null {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "server_misconfig", message: "ANTHROPIC_API_KEY not set" },
-      { status: 500 }
-    );
-  }
-
   let body: { location?: string; description?: string };
   try {
     body = await req.json();
@@ -59,8 +53,20 @@ export async function POST(req: NextRequest) {
 
   const location = (body.location ?? "").trim();
   const description = (body.description ?? "").trim();
+
+  if (isMockMode()) {
+    return NextResponse.json(
+      mockScenario({ location: location || "an unspecified location", description })
+    );
+  }
+
   if (!location || !description) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(FALLBACK);
   }
 
   try {

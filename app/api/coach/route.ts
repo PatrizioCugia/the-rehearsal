@@ -5,6 +5,8 @@ import {
   stripInter1Payload,
   stripHistoryEntries,
 } from "@/lib/coach-payload";
+import { isMockMode } from "@/lib/mock";
+import { mockCoachLine, pickFallbackCoachLine } from "@/lib/mock/coach";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,14 +14,6 @@ export const maxDuration = 60;
 const DEFAULT_THRESHOLD_CQI = 75;
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "server_misconfig", message: "ANTHROPIC_API_KEY not set" },
-      { status: 500 }
-    );
-  }
-
   let body: {
     scenario?: { title?: string; framing?: string; scenePartnerLine?: string };
     scenarioTitle?: string; // backward compat
@@ -28,11 +22,46 @@ export async function POST(req: NextRequest) {
     inter1?: unknown;
     mode?: CoachMode;
     thresholdCqi?: number;
+    // Test-only: force a particular failure mode (only honoured when set).
+    _forceFail?: "throw" | "non_ok" | "non_json";
   };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+
+  const inter1 = stripInter1Payload(body.inter1);
+  const history = stripHistoryEntries(body.history);
+  const takeNumber = body.takeNumber ?? 1;
+  const mode: CoachMode = body.mode === "stopping" ? "stopping" : "continuing";
+  const thresholdCqi =
+    typeof body.thresholdCqi === "number"
+      ? body.thresholdCqi
+      : DEFAULT_THRESHOLD_CQI;
+
+  // MOCK_MODE: short-circuit with a canned in-register line.
+  if (isMockMode()) {
+    const report = mockCoachLine({
+      takeNumber,
+      history,
+      inter1,
+      mode,
+      thresholdCqi,
+    });
+    return NextResponse.json({ report });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        report: pickFallbackCoachLine(takeNumber),
+        fallback: true,
+        reason: "server_misconfig",
+      },
+      { status: 200 }
+    );
   }
 
   const scenario = {
@@ -43,17 +72,18 @@ export async function POST(req: NextRequest) {
 
   const userMessage = buildCoachUserMessage({
     scenario,
-    takeNumber: body.takeNumber ?? 1,
-    history: stripHistoryEntries(body.history),
-    inter1: stripInter1Payload(body.inter1),
-    mode: body.mode === "stopping" ? "stopping" : "continuing",
-    thresholdCqi:
-      typeof body.thresholdCqi === "number"
-        ? body.thresholdCqi
-        : DEFAULT_THRESHOLD_CQI,
+    takeNumber,
+    history,
+    inter1,
+    mode,
+    thresholdCqi,
   });
 
   try {
+    if (body._forceFail === "throw") {
+      throw new Error("forced failure");
+    }
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -69,21 +99,40 @@ export async function POST(req: NextRequest) {
       }),
     });
 
+    if (body._forceFail === "non_ok" || !res.ok) {
+      return NextResponse.json(
+        {
+          report: pickFallbackCoachLine(takeNumber),
+          fallback: true,
+          reason: "upstream",
+        },
+        { status: 200 }
+      );
+    }
+
     const text = await res.text();
+    if (body._forceFail === "non_json") {
+      return NextResponse.json(
+        {
+          report: pickFallbackCoachLine(takeNumber),
+          fallback: true,
+          reason: "upstream_non_json",
+        },
+        { status: 200 }
+      );
+    }
+
     let json: unknown;
     try {
       json = JSON.parse(text);
     } catch {
       return NextResponse.json(
-        { error: "upstream_non_json", body: text.slice(0, 500) },
-        { status: 502 }
-      );
-    }
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: "upstream", upstream: json },
-        { status: res.status }
+        {
+          report: pickFallbackCoachLine(takeNumber),
+          fallback: true,
+          reason: "upstream_non_json",
+        },
+        { status: 200 }
       );
     }
 
@@ -95,13 +144,25 @@ export async function POST(req: NextRequest) {
       .join("\n")
       .trim();
 
+    if (!report) {
+      return NextResponse.json(
+        {
+          report: pickFallbackCoachLine(takeNumber),
+          fallback: true,
+          reason: "empty_content",
+        },
+        { status: 200 }
+      );
+    }
+
     return NextResponse.json({ report });
   } catch (e) {
     console.error("[coach] threw", e);
     return NextResponse.json(
       {
-        report:
-          "The assessment could not be retrieved. We will continue without it.",
+        report: pickFallbackCoachLine(takeNumber),
+        fallback: true,
+        reason: "exception",
       },
       { status: 200 }
     );

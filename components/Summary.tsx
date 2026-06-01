@@ -5,6 +5,8 @@ import type { Scenario } from "@/lib/scenario";
 import type { Take } from "@/lib/session";
 import Curve from "./Curve";
 import TypedText from "./TypedText";
+import ProceduralBackdrop from "./ProceduralBackdrop";
+import { isMockMode } from "@/lib/mock";
 
 export default function Summary({
   scenario,
@@ -99,7 +101,7 @@ export default function Summary({
         </p>
       </header>
 
-      {setImageUrl && (
+      {setImageUrl ? (
         <div className="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -108,7 +110,11 @@ export default function Summary({
             className="w-full h-auto object-cover"
           />
         </div>
-      )}
+      ) : isMockMode() ? (
+        <div className="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden aspect-[4/3]">
+          <ProceduralBackdrop scenarioTitle={scenario.title} />
+        </div>
+      ) : null}
 
       <Curve takes={takes} />
 

@@ -7,8 +7,10 @@ import {
   type StrippedInter1,
 } from "@/lib/coach-payload";
 import { THRESHOLD_CQI, type Take } from "@/lib/session";
+import { isMockMode } from "@/lib/mock";
 import Curve from "./Curve";
 import TypedText from "./TypedText";
+import ProceduralBackdrop from "./ProceduralBackdrop";
 
 type Status =
   | "idle"
@@ -185,6 +187,7 @@ export default function Recorder(props: {
         const form = new FormData();
         const ext = blob.type.includes("mp4") ? "mp4" : "webm";
         form.append("file", blob, `take-${takeNumber}.${ext}`);
+        form.append("takeNumber", String(takeNumber));
         const r1 = await fetch("/api/analyze", { method: "POST", body: form });
         if (!r1.ok) throw new Error(`analyze failed: ${r1.status}`);
         const inter1Raw = await r1.json();
@@ -316,6 +319,8 @@ export default function Recorder(props: {
               alt="The rehearsal set."
               className="w-full h-full object-cover"
             />
+          ) : isMockMode() ? (
+            <ProceduralBackdrop scenarioTitle={scenario.title} />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
               <p className="text-neutral-500 text-xs leading-relaxed">
